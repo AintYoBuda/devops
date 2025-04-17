@@ -1,0 +1,141 @@
+# DevOps Lab Project - Simple Web App Stack
+
+## Stack Components:
+# - Nginx (frontend)
+# - Node.js app (backend API)
+# - PostgreSQL (database)
+# - GitLab CI/CD pipeline (simulated locally)
+# - Prometheus + Grafana (observability)
+# - Prometheus metrics endpoint exposed in Node.js
+# - Healthcheck and readiness probes
+
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:latest
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - app
+
+  app:
+    build:
+      context: ./app
+    dockerfile: Dockerfile
+    environment:
+      - DB_HOST=db
+      - DB_USER=devops
+      - DB_PASS=devops123
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: devopslab
+      POSTGRES_USER: devops
+      POSTGRES_PASSWORD: devops123
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+volumes:
+  db_data:
+  grafana_data:
+
+
+# Node.js app Dockerfile (./app/Dockerfile)
+# ----------------------------------------
+# FROM node:18
+# WORKDIR /usr/src/app
+# COPY package*.json ./
+# RUN npm install
+# COPY . .
+# EXPOSE 3000
+# CMD [ "node", "index.js" ]
+
+
+# Node.js app code (./app/index.js)
+# ---------------------------------
+# const express = require('express');
+# const app = express();
+# const PORT = 3000;
+# const client = require('prom-client');
+# const collectDefaultMetrics = client.collectDefaultMetrics;
+# collectDefaultMetrics();
+#
+# app.get('/', (req, res) => res.send('Hello from DevOps Lab!'));
+#
+# app.get('/metrics', async (req, res) => {
+#   res.set('Content-Type', client.register.contentType);
+#   res.end(await client.register.metrics());
+# });
+#
+# app.get('/health', (req, res) => res.send('OK'));
+#
+# app.listen(PORT, () => console.log(`App running on port ${PORT}`));
+
+
+# Nginx config (./nginx/nginx.conf)
+# ---------------------------------
+# events {}
+# http {
+#   server {
+#     listen 80;
+#     location / {
+#       proxy_pass http://app:3000;
+#     }
+#   }
+# }
+
+
+# Prometheus config (./prometheus/prometheus.yml)
+# ----------------------------------------------
+# global:
+#   scrape_interval: 15s
+#
+# scrape_configs:
+#   - job_name: 'node-app'
+#     static_configs:
+#       - targets: ['app:3000']
+
+
+# GitLab CI pipeline (.gitlab-ci.yml)
+# -----------------------------------
+# stages:
+#   - build
+#   - deploy
+#
+# build:
+#   stage: build
+#   script:
+#     - docker build -t devops-lab-app ./app
+#
+# deploy:
+#   stage: deploy
+#   script:
+#     - docker-compose down
+#     - docker-compose up -d
